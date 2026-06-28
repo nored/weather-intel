@@ -1,0 +1,25 @@
+{
+  "name": "weather-intel",
+  "version": "0.1.0",
+  "description": "Planet-scale open weather/geophysical situational-awareness layer + natural-language weather answers. One world map and one structured data API stitching global rain radar, satellite, alerts, disasters, quakes and space weather; plus an `ask` pipeline that answers any weather-dependent question (geocode -> forecast -> answer).",
+  "keywords": [
+    "weather", "radar", "satellite", "forecast", "open-data", "maplibre",
+    "osint", "situational-awareness", "open-meteo", "gdacs", "agent", "llm"
+  ],
+  "type": "module",
+  "main": "server/index.js",
+  "bin": {
+    "weather-intel": "server/cli.js"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "ask": "node server/cli.js ask",
+    "world": "node server/cli.js world"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0"
+  }
+}

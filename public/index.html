@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>weather-intel — planet view</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div id="map"></div>
+
+  <header id="topbar">
+    <strong>weather-intel</strong>
+    <span class="muted">all of Earth's weather at once · scope: <span id="scope">whole Earth</span></span>
+    <label class="lockview"><input type="checkbox" id="lockview" /> lock to view</label>
+    <button id="intel-btn" title="generate intel">⚡ Intel</button>
+    <button id="settings-btn" title="sources &amp; keys">⚙</button>
+    <button id="refresh" title="refresh now">↻</button>
+  </header>
+
+  <div id="intel-panel" class="panel hidden">
+    <div class="panel-head"><h2>Ask — answered from a weather angle</h2><button class="x" data-close="intel-panel">✕</button></div>
+    <input id="intel-q" placeholder="any question — when will it rain in London? · forecast for Tokyo? · frost near Bordeaux this week?" />
+    <button id="intel-run">Answer</button>
+    <div id="intel-out" class="md"></div>
+  </div>
+
+  <div id="settings-panel" class="panel hidden">
+    <div class="panel-head"><h2>Sources &amp; credentials</h2><button class="x" data-close="settings-panel">✕</button></div>
+    <div id="sources-list"></div>
+    <h3>Keys</h3>
+    <div id="creds-form"></div>
+    <button id="creds-save">Save keys</button>
+    <div id="creds-msg" class="muted"></div>
+  </div>
+
+  <aside id="left">
+    <h2>Layers</h2>
+    <div id="layers"></div>
+  </aside>
+
+  <aside id="right">
+    <h2>Live events</h2>
+    <div id="feeds"></div>
+  </aside>
+
+  <footer id="scrubber">
+    <button id="play" title="play/pause radar">▶</button>
+    <input type="range" id="frame" min="0" max="0" value="0" />
+    <span id="frametime" class="muted"></span>
+  </footer>
+
+  <div id="statusbar"><span id="status">starting…</span></div>
+
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+node_modules/
+data/credentials.json
+data/cache/
+data/threads/
+data/runs.json
+*.log
+.DS_Store
