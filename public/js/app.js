@@ -102,9 +102,16 @@ async function loadSnapshot() {
     // Only (re)build the frame layers when the timeline actually changed, so a
     // background refresh never disrupts in-progress playback.
     if (radar.latest !== state.radar.lastLatest) {
-      state.radar.frames = radar.frames;
+      // Route every frame through our caching tile proxy (?time=<frame>) instead
+      // of hitting RainViewer directly: same-origin (no CORS) and server+browser
+      // cached, so playback loops and the 60s refresh reuse tiles instead of
+      // re-fetching — which was flooding RainViewer and getting 429'd.
+      state.radar.frames = radar.frames.map(f => ({
+        ...f,
+        urlTemplate: `${animTile.tilesUrl}?time=${encodeURIComponent(f.time)}`,
+      }));
       state.radar.lastLatest = radar.latest;
-      Wx.setRadarFrames(state.radar.layerId, radar.frames, animTile.opacity, 7);
+      Wx.setRadarFrames(state.radar.layerId, state.radar.frames, animTile.opacity, 7);
       Wx.setRadarVisible(state.radar.layerId, animTile.on);
       if (!state.radar.playing) { state.radar.idx = radar.frames.length - 1; setupScrubber(); }
       else showFrame(state.radar.idx);
