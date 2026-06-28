@@ -12,6 +12,20 @@ import { config } from '../config.js';
 
 export const tilesRouter = Router();
 
+// Pace upstream tile fetches so a zoomed-in animation (one set of tiles per
+// frame × ~13 frames = hundreds of tiles) doesn't burst the upstream and get
+// rate-limited (429). Cache hits pass through these slots in sub-ms; only cold
+// fetches actually occupy one, which is exactly what we want to throttle.
+const MAX_UPSTREAM = 6;
+let active = 0;
+const waiters = [];
+async function withSlot(fn) {
+  if (active >= MAX_UPSTREAM) await new Promise(r => waiters.push(r));
+  active++;
+  try { return await fn(); }
+  finally { active--; const next = waiters.shift(); if (next) next(); }
+}
+
 function parseLayer(layer) {
   const i = layer.indexOf(':');
   return i < 0 ? { id: layer, domain: null } : { id: layer.slice(0, i), domain: layer.slice(i + 1) };
@@ -54,7 +68,8 @@ tilesRouter.get('/:layer/:z/:x/:y', async (req, res) => {
     const url = frame.urlTemplate
       .replace('{z}', z).replace('{x}', x).replace('{y}', y)
       .replace('{s}', 'a');
-    const { body, stale } = await cachedFetch(url, { ttl: config.tilesCacheTtl, as: 'buffer' });
+    const { body, stale } = await withSlot(() =>
+      cachedFetch(url, { ttl: config.tilesCacheTtl, as: 'buffer', retries: 4, retryBaseMs: 600 }));
     res.set('Content-Type', body.contentType || 'image/png');
     res.set('Cache-Control', `public, max-age=${config.tilesCacheTtl}`);
     if (stale) res.set('X-Cache', 'stale');

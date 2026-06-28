@@ -73,30 +73,54 @@ export async function cached(ns, keyParts, ttl, producer) {
   }
 }
 
-// Caching fetch. opts: { ttl (s), headers, method, body, as:'json'|'text'|'buffer', signal }.
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// Caching fetch. opts: { ttl (s), headers, method, body, as:'json'|'text'|'buffer',
+//   signal, retries, retryBaseMs }.
 // Buffers are stored base64 on disk (tiles are small PNGs). Returns the parsed
-// body directly (the cached() wrapper handles freshness/stale).
+// body directly (the cached() wrapper handles freshness/stale). `retries` retries
+// transient upstream failures (429/5xx/network) with exponential backoff + jitter
+// WITHIN the request — so rate-limited tiles come back as a (slightly slower) 200
+// instead of a 502 the browser won't re-request, and the success then gets cached.
 export async function cachedFetch(url, opts = {}) {
-  const { ttl, headers = {}, method = 'GET', body, as = 'json', signal } = opts;
+  const { ttl, headers = {}, method = 'GET', body, as = 'json', signal, retries = 0, retryBaseMs = 500 } = opts;
   const ns = 'http';
   const res = await cached(ns, [method, url, body || '', as], ttl, async () => {
-    const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), config.sourceTimeoutMs);
-    if (signal) signal.addEventListener('abort', () => ctl.abort(), { once: true });
-    try {
-      const r = await fetch(url, {
-        method, body,
-        headers: { 'User-Agent': config.userAgent, ...headers },
-        signal: ctl.signal,
-      });
-      if (!r.ok) throw new Error(`HTTP ${r.status} for ${url}`);
-      if (as === 'json') return { kind: 'json', data: await r.json() };
-      if (as === 'text') return { kind: 'text', data: await r.text() };
-      const buf = Buffer.from(await r.arrayBuffer());
-      return { kind: 'buffer', data: buf.toString('base64'), contentType: r.headers.get('content-type') || 'application/octet-stream' };
-    } finally {
-      clearTimeout(timer);
+    let lastErr;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), config.sourceTimeoutMs);
+      const onAbort = () => ctl.abort();
+      if (signal) signal.addEventListener('abort', onAbort, { once: true });
+      try {
+        const r = await fetch(url, {
+          method, body,
+          headers: { 'User-Agent': config.userAgent, ...headers },
+          signal: ctl.signal,
+        });
+        const transient = r.status === 429 || (r.status >= 500 && r.status < 600);
+        if (transient && attempt < retries) {
+          const ra = Number(r.headers.get('retry-after'));
+          const wait = Number.isFinite(ra) ? ra * 1000 : retryBaseMs * 2 ** attempt + Math.random() * 250;
+          lastErr = new Error(`HTTP ${r.status} for ${url}`);
+          await sleep(wait);
+          continue;
+        }
+        if (!r.ok) throw new Error(`HTTP ${r.status} for ${url}`);
+        if (as === 'json') return { kind: 'json', data: await r.json() };
+        if (as === 'text') return { kind: 'text', data: await r.text() };
+        const buf = Buffer.from(await r.arrayBuffer());
+        return { kind: 'buffer', data: buf.toString('base64'), contentType: r.headers.get('content-type') || 'application/octet-stream' };
+      } catch (e) {
+        lastErr = e;
+        if (attempt < retries) { await sleep(retryBaseMs * 2 ** attempt + Math.random() * 250); continue; }
+        throw e;
+      } finally {
+        clearTimeout(timer);
+        if (signal) signal.removeEventListener('abort', onAbort);
+      }
     }
+    throw lastErr;
   });
   const v = res.value;
   const out = v.kind === 'buffer'

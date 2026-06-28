@@ -36,7 +36,9 @@ export const config = {
   // --- Caching (mandatory: global feeds are rate-limited, many clients) --
   cacheDir: process.env.CACHE_DIR || 'data/cache',
   cacheTtlDefault: num('CACHE_TTL', 600),     // seconds; per-op TTL overrides in adapters
-  tilesCacheTtl: num('TILES_CACHE_TTL', 300), // seconds for proxied raster tiles
+  tilesCacheTtl: num('TILES_CACHE_TTL', 1800), // seconds for proxied raster tiles
+  // (tile content is immutable per URL — radar frame paths and dated satellite
+  // layers don't change — so caching long is safe and spares the upstream.)
 
   // --- Background poller -------------------------------------------------
   // Keeps the whole-Earth snapshot warm so the default planet view is instant

@@ -28,6 +28,7 @@ function splitLayers(layers) {
   const tiles = layers.filter(l => l.tile).map(l => ({
     id: l.id, source: l.source, domain: l.domain, title: l.title,
     animated: l.animated, tilesUrl: l.tilesUrl, opacity: l.opacity ?? 0.7,
+    maxzoom: l.maxzoom ?? undefined,
     configured: l.configured, on: l.defaultOn && l.configured,
   })).sort((a, b) => (a.animated === b.animated ? 0 : a.animated ? 1 : -1));
 
@@ -111,7 +112,7 @@ async function loadSnapshot() {
         urlTemplate: `${animTile.tilesUrl}?time=${encodeURIComponent(f.time)}`,
       }));
       state.radar.lastLatest = radar.latest;
-      Wx.setRadarFrames(state.radar.layerId, state.radar.frames, animTile.opacity, 7);
+      Wx.setRadarFrames(state.radar.layerId, state.radar.frames, animTile.opacity, radar.maxzoom || 7);
       Wx.setRadarVisible(state.radar.layerId, animTile.on);
       if (!state.radar.playing) { state.radar.idx = radar.frames.length - 1; setupScrubber(); }
       else showFrame(state.radar.idx);
@@ -311,7 +312,7 @@ async function main() {
   // the animated radar + feature layers, via the proxy or a direct WMS template.
   for (const t of state.tiles) {
     if (t.animated || !t.tilesUrl) continue;
-    Wx.addRaster(tileMapId(t), t.tilesUrl, { opacity: t.opacity });
+    Wx.addRaster(tileMapId(t), t.tilesUrl, { opacity: t.opacity, maxzoom: t.maxzoom });
     Wx.setLayerVisible(tileMapId(t), t.on);
   }
 

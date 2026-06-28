@@ -36,10 +36,16 @@ export function buildLayers(creds = loadCredentials()) {
       const scheme = a.tileScheme || 'xyz';
       // XYZ tiles go through our caching proxy (also hides any token); WMS tiles
       // (keyless, bbox-based) are handed to the map as a direct template.
-      let tilesUrl = null;
+      let tilesUrl = null, maxzoom = null;
       if (tiled) {
-        if (scheme === 'wms') { try { tilesUrl = a.getTiles(domain).urlTemplate; } catch { tilesUrl = null; } }
-        else tilesUrl = `/api/tiles/${a.id}:${domain}/{z}/{x}/{y}`;
+        if (scheme === 'wms') { try { const t = a.getTiles(domain); tilesUrl = t.urlTemplate; maxzoom = t.maxzoom ?? null; } catch { tilesUrl = null; } }
+        else {
+          tilesUrl = `/api/tiles/${a.id}:${domain}/{z}/{x}/{y}`;
+          // Capture the source's real max zoom (cheap for static getTiles) so the
+          // map overzooms (scales the deepest tiles) past it instead of going
+          // blank. Animated layers carry maxzoom on the snapshot's radar timeline.
+          if (!animated && typeof a.getTiles === 'function') { try { maxzoom = a.getTiles(domain).maxzoom ?? null; } catch {} }
+        }
       }
       layers.push({
         id: `${a.id}:${domain}`,
@@ -51,6 +57,7 @@ export function buildLayers(creds = loadCredentials()) {
         order: meta.order,
         scheme,
         animated,                              // has a frame timeline
+        maxzoom,                               // source's deepest zoom (overzoom past it)
         tile: tiled,                           // raster tile overlay
         feature: featured,                     // GeoJSON event overlay
         framesUrl: animated ? `/api/tiles/${a.id}:${domain}/times` : null,
