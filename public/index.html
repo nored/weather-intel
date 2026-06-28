@@ -15,8 +15,9 @@
     <span class="muted">all of Earth's weather at once · scope: <span id="scope">whole Earth</span></span>
     <label class="lockview"><input type="checkbox" id="lockview" /> lock to view</label>
     <button id="intel-btn" title="generate intel">⚡ Intel</button>
+    <button id="markers-btn" title="markers — drop &amp; jump to pins">📍</button>
     <button id="settings-btn" title="sources &amp; keys">⚙</button>
-    <button id="refresh" title="refresh now">↻</button>
+    <button id="refresh" title="refresh now (auto-refreshes anyway)">↻</button>
   </header>
 
   <div id="intel-panel" class="panel hidden">
@@ -33,6 +34,13 @@
     <div id="creds-form"></div>
     <button id="creds-save">Save keys</button>
     <div id="creds-msg" class="muted"></div>
+  </div>
+
+  <div id="markers-panel" class="panel hidden">
+    <div class="panel-head"><h2>Markers</h2><button class="x" data-close="markers-panel">✕</button></div>
+    <p class="muted">Right-click the map to drop a pin, then <b>drag it</b> to position it exactly (or type lat/lon in its popup). Click one below to jump to it.</p>
+    <button id="marker-add">+ Drop a pin (then drag to place)</button>
+    <div id="markers-list"></div>
   </div>
 
   <aside id="left">

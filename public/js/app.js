@@ -6,6 +6,7 @@
 
 import { $, $$, el, clear, fmtAgo, mdToHtml } from './dom.mjs';
 import * as Wx from './map.mjs';
+import * as Markers from './markers.mjs';
 
 const FEATURE_KEY = { earthquake: 'earthquakes', tropical: 'storms', alerts: 'alerts', wildfire: 'wildfires', disaster: 'disasters' };
 const tileMapId = (t) => `t:${t.id}`;
@@ -184,7 +185,7 @@ function renderFeeds(snap) {
 function renderStatus(snap) {
   const sw = snap.spaceWeather ? ` · Kp ${snap.spaceWeather.kpIndex ?? '?'}` : '';
   $('#status').innerHTML = snap.sources.map(s => `<span class="src ${s.status}">${s.id}</span>`).join(' ') +
-    ` · ${snap.stats.features} features · updated ${new Date(snap.generatedAt).toLocaleTimeString()}${sw}`;
+    ` · ${snap.stats.features} features · <span class="live">● auto</span> updated ${new Date(snap.generatedAt).toLocaleTimeString()} (every ${state.refreshSecs}s)${sw}`;
 }
 
 // --- intel + settings panels -------------------------------------------
@@ -200,6 +201,9 @@ function wirePanels() {
   const show = (id, on) => $('#' + id).classList.toggle('hidden', !on);
   $('#intel-btn').addEventListener('click', () => show('intel-panel', $('#intel-panel').classList.contains('hidden')));
   $('#settings-btn').addEventListener('click', () => { const opening = $('#settings-panel').classList.contains('hidden'); show('settings-panel', opening); if (opening) renderSettings(); });
+  $('#markers-btn').addEventListener('click', () => { const opening = $('#markers-panel').classList.contains('hidden'); show('markers-panel', opening); if (opening) renderMarkers(); });
+  $('#marker-add').addEventListener('click', () => { const c = Wx.getMap().getCenter(); Markers.add({ lon: c.lng, lat: c.lat }); });
+  Markers.setOnChange(renderMarkers);
   $$('[data-close]').forEach(b => b.addEventListener('click', () => show(b.dataset.close, false)));
 
   const runAnswer = async () => {
@@ -217,6 +221,7 @@ function wirePanels() {
 
   if (location.hash === '#settings') { show('settings-panel', true); renderSettings(); }
   else if (location.hash === '#intel') show('intel-panel', true);
+  else if (location.hash === '#markers') { show('markers-panel', true); renderMarkers(); }
 
   const form = clear($('#creds-form'));
   for (const f of CRED_FIELDS) form.append(el('label', { class: 'cred' }, f.label, el('input', { type: 'password', id: `cred-${f.key}`, placeholder: '••••••' })));
@@ -242,7 +247,38 @@ async function renderSettings() {
   }
 }
 
-// --- click anywhere → "normal weather" here (Open-Meteo) ---------------
+// --- markers panel: list of saved pins, click to jump ------------------
+function renderMarkers() {
+  const box = clear($('#markers-list'));
+  const ms = Markers.list();
+  if (!ms.length) { box.append(el('p', { class: 'muted' }, 'No markers yet. Right-click the map to drop one.')); return; }
+  for (const m of ms) {
+    const go = el('div', { class: 'mk-go' },
+      el('span', { class: 'dot', style: `background:${m.color}` }),
+      el('span', { class: 'mk-name' }, m.name),
+      el('span', { class: 'muted mk-co' }, `${m.lat.toFixed(2)}, ${m.lon.toFixed(2)} · z${m.zoom}`));
+    go.addEventListener('click', () => Markers.jumpTo(m.id));
+    const del = el('button', { class: 'mini' }, '✕');
+    del.addEventListener('click', () => Markers.remove(m.id));
+    box.append(el('div', { class: 'mk-row' }, go, del));
+  }
+}
+
+// --- point weather (Open-Meteo) — shared by click-anywhere + markers ----
+async function pointWeatherHtml(lat, lon) {
+  try {
+    const d = await api(`/api/point?lat=${lat.toFixed(3)}&lon=${lon.toFixed(3)}`);
+    const c = d.current || {};
+    const next = (d.hourly || []).find(h => (h.precipProb ?? 0) >= 50);
+    return `<h4>${c.weather} · ${Math.round(c.temperatureC)}°C</h4>` +
+      `<div>feels ${Math.round(c.feelsLikeC)}° · ${c.humidity}% RH</div>` +
+      `<div>cloud ${c.cloudCoverPct}% · wind ${Math.round(c.windKmh)} km/h</div>` +
+      `<div>precip now ${c.precipitationMm ?? 0} mm${next ? ` · ${next.precipProb}% by ${new Date(next.time).getHours()}:00` : ''}</div>` +
+      `<div class="muted">${lat.toFixed(2)}, ${lon.toFixed(2)} · ${d.timezone || ''} · open-meteo</div>`;
+  } catch (err) { return `<div class="muted">weather failed: ${err.message}</div>`; }
+}
+
+// --- click anywhere → "normal weather" here ----------------------------
 function wirePointWeather() {
   const map = Wx.getMap();
   map.on('click', async (e) => {
@@ -252,16 +288,7 @@ function wirePointWeather() {
     const { lng, lat } = e.lngLat;
     const popup = new (window.maplibregl.Popup)({ maxWidth: '260px' })
       .setLngLat(e.lngLat).setHTML('<div class="pop"><b>loading weather…</b></div>').addTo(map);
-    try {
-      const d = await api(`/api/point?lat=${lat.toFixed(3)}&lon=${lng.toFixed(3)}`);
-      const c = d.current || {};
-      const next = (d.hourly || []).find(h => (h.precipProb ?? 0) >= 50);
-      popup.setHTML(`<div class="pop pt"><h4>${c.weather} · ${Math.round(c.temperatureC)}°C</h4>` +
-        `<div>feels ${Math.round(c.feelsLikeC)}° · ${c.humidity}% RH</div>` +
-        `<div>cloud ${c.cloudCoverPct}% · wind ${Math.round(c.windKmh)} km/h</div>` +
-        `<div>precip now ${c.precipitationMm ?? 0} mm${next ? ` · ${next.precipProb}% by ${new Date(next.time).getHours()}:00` : ''}</div>` +
-        `<div class="muted">${lat.toFixed(2)}, ${lng.toFixed(2)} · ${d.timezone || ''} · open-meteo</div></div>`);
-    } catch (err) { popup.setHTML(`<div class="pop">weather failed: ${err.message}</div>`); }
+    popup.setHTML(`<div class="pop pt">${await pointWeatherHtml(lat, lng)}</div>`);
   });
 }
 
@@ -284,6 +311,7 @@ async function main() {
   await loadSnapshot();
   wirePanels();
   wirePointWeather();
+  Markers.initMarkers(Wx.getMap(), window.maplibregl, { weather: pointWeatherHtml });
   if (new URLSearchParams(location.search).get('autoplay')) play();
 
   $('#play').addEventListener('click', play);
